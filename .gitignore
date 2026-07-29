@@ -1,0 +1,18 @@
+# Scope: only Sim-1 ~ Sim-9 (Stage1 + Stage2 core) and the English README
+# are meant to be public. Everything below is excluded for now.
+
+# --- Stage 3: Sim-14 ~ Sim-16 (off-grid), out of Sim-1~9 scope ---
+/Stage3/
+
+# --- Stage 2 items beyond Sim-9 ---
+/Stage2/appendixC_extra/
+/Stage2/theory_dd_relation.m
+/Stage2/ideal_pulse_relation.m
+/Stage2/sim10_symbol_level_theory.m
+/Stage2/sim11_ideal_vs_rectangular_pulse.m
+/Stage2/sim12_single_path_shift_test.m
+/Stage2/sim13_noise_statistics.m
+
+# --- Chinese-language README files (internal notes, not for public repo) ---
+/Stage1/README.md
+/Stage2/README.md
