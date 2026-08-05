@@ -21,6 +21,7 @@ Full simulation plan and equation-to-code cross-reference:
 |---|---|---|
 | **Stage 1** | Sim-1 – Sim-4 | Are the modulator and demodulator self-consistent, with no channel at all? |
 | **Stage 2** | Sim-5 – Sim-9 | Do the time, time-frequency, delay-time, and delay-Doppler domain representations of an **on-grid** multipath channel agree with each other? |
+| **Extra** | Sim-17-style, on/off-grid | Do the closed-form delay-Doppler relation (Table 4.3) and the four frame variants (CP/ZP/RCP/RZP) agree with an independently-built off-grid convolution ground truth, on-grid *and* off-grid? See [`two_path_verification/`](two_path_verification) and [`OTFS_variants/`](OTFS_variants) below. |
 
 Everything is verified by comparing independently-written implementations
 of the same equation and checking the relative error against a numerical
@@ -50,19 +51,26 @@ chap4_matlab/
 │   ├── sim3_permutation_matrix.m
 │   ├── sim4_parseval.m
 │   └── run_stage1.m
-└── Stage2/             # Sim-5 ~ Sim-9 (+ Sim-10 ~ Sim-13): on-grid channel, 4-domain I/O
-    ├── gen_channel_taps.m
-    ├── gen_gs.m
-    ├── gen_G.m
-    ├── apply_channel_conv.m
-    ├── get_block.m
-    ├── build_channel_matrices.m
-    ├── sim5_time_domain_convolution.m
-    ├── sim6_block_wise_time_domain.m
-    ├── sim7_time_frequency_domain.m
-    ├── sim8_delay_time_domain.m
-    ├── sim9_delay_doppler_domain.m
-    └── run_stage2.m
+├── Stage2/             # Sim-5 ~ Sim-9 (+ Sim-10 ~ Sim-13): on-grid channel, 4-domain I/O
+│   ├── gen_channel_taps.m
+│   ├── gen_gs.m
+│   ├── gen_G.m
+│   ├── apply_channel_conv.m
+│   ├── get_block.m
+│   ├── build_channel_matrices.m
+│   ├── sim5_time_domain_convolution.m
+│   ├── sim6_block_wise_time_domain.m
+│   ├── sim7_time_frequency_domain.m
+│   ├── sim8_delay_time_domain.m
+│   ├── sim9_delay_doppler_domain.m
+│   └── run_stage2.m
+├── two_path_verification/   # Closed-form (Table 4.3) vs. off-grid convolution ground truth
+│   ├── otfs_build_G.m        # Ground-truth G: CP/ZP/RCP/RZP, fractional delay/Doppler taps
+│   ├── otfs_dd_closed_form.m # Y from the closed form: 'integer' (Table 4.3) or 'fractional'
+│   └── otfs_verify.m         # Driver: 4 tests, incl. TF-domain and Fig. 4.16 reproduction
+└── OTFS_variants/      # CP/ZP/RCP/RZP structural comparison (Table 4.2/4.3/4.4, §4.5)
+    ├── otfs_verify.m          # T1-T6 self-verification of G / H̃ / H per variant
+    └── otfs_variants_spy.m    # spy-style structure plots of G, H̃, H for all 4 variants
 ```
 
 Stage 2 depends on Stage 1 (`addpath('../Stage1')` inside each script), so
@@ -179,6 +187,70 @@ Two channel boundary conventions are supported side by side via `gen_G.m`:
 See [`Stage2/README.md`](Stage2/README.md) for full details, including the
 corrected `H̃ = PᵀGP` convention (the book's Appendix C reference code has
 `H̃ = P·G·Pᵀ`, which is inconsistent with its own `x̃ = Pᵀs` definition).
+
+---
+
+## Two-path verification — closed-form vs. convolution ground truth (`two_path_verification/`)
+
+Standalone scripts (no dependency on Stage 1/2) that check the book's symbol-level
+closed-form delay-Doppler relation (Table 4.3, and its fractional generalization)
+against an independently-built ground-truth path: modulate → apply the off-grid
+channel matrix `G` → demodulate.
+
+```
+Path A (ground truth):  X --IDZT--> s --G (off-grid, otfs_build_G)--> r --DZT--> Y_A
+Path B (model):         X --closed-form H_DD (Table 4.3) or matrix identity (4.60)--> Y_B
+```
+
+| File | Role |
+|---|---|
+| `otfs_build_G.m` | Builds the time-domain channel matrix `G` (ground truth) for CP/ZP/RCP/RZP, supporting fractional delay (`sinc` interpolation, Eq. (4.6)) and fractional Doppler taps |
+| `otfs_dd_closed_form.m` | Computes `Y` directly from the closed-form relation: `'integer'` mode (Table 4.3 / (4.118)–(4.122)) or `'fractional'` mode (periodic-sinc expansion, (4.78)/(4.105), CP/ZP only) |
+| `otfs_verify.m` | Driver script running the four tests below |
+
+| Test | Checks | Theory |
+|---|---|---|
+| **Test 1** | Integer delay/Doppler taps, all four variants: convolution path vs. matrix identity (4.60) vs. symbol-wise Table 4.3 | Table 4.3, Eq. (4.60) |
+| **Test 2** | Fractional-Doppler sweep (CP-OTFS): NMSE of the integer-tap approximation vs. the fractional closed form, as a function of fractional offset | Eq. (4.105) |
+| **Test 3** | Time-frequency domain: exact identity `y̌ = Ȟx̌` (always holds) vs. the ideal-pulse single-tap approximation (biorthogonality loss) | Eq. (4.13)–(4.14), (4.42) |
+| **Test 4** | Doppler-spread vector `ν_{m,l}[k]` at integer vs. fractional offset, reproducing Fig. 4.16 | Eq. (4.79)–(4.80) |
+
+**Notable finding:** `otfs_dd_closed_form.m` corrects a phase convention in the
+book's (4.118). The correct symbol-level phase uses the *unscaled* Doppler tap
+`κ_i`; only the Doppler shift index `k_i` needs the `γ_g` guard-length scaling
+from (4.97). Applying the book's phase literally as written makes the CP/ZP
+closed form disagree with the convolution ground truth.
+
+---
+
+## OTFS frame variants — CP/ZP/RCP/RZP structural comparison (`OTFS_variants/`)
+
+Standalone scripts (no dependency on Stage 1/2) extending the on-grid/off-grid
+analysis to all four frame-boundary conventions defined in §4.5, reproducing
+Table 4.2 / 4.3 / 4.4 and Fig. 4.8, 4.11, 4.12, 4.14, 4.15, 4.17–4.19.
+
+| File | Role |
+|---|---|
+| `otfs_verify.m` | Six-part self-verification (T1–T6, see below) of `G`, `H̃ = PᵀGP`, `H = (I_M⊗F_N)H̃(I_M⊗F_N^†)` for all four variants, run on three built-in scenarios (on-grid `Lg=0`, on-grid `Lg=2`, off-grid `Lg=5`) |
+| `otfs_variants_spy.m` | Renders the `spy`-style support-set (or dB-magnitude) structure of `G`, `H̃`, `H` side by side for CP/ZP/RCP/RZP, plus a plot of which entries are lost when the Doppler tap is rounded to an integer |
+
+| Test | Checks | Theory |
+|---|---|---|
+| **T1** | Variant-independent algebraic identities: `P` is a permutation (`PᵀP=I`), `A=I_M⊗F_N` is unitary, Frobenius norm and nnz are preserved across `G → H̃ → H` | — |
+| **T2** | `G·s` matches the book's element-wise assembly for each variant | Eq. (4.64) RZP, (4.82) RCP, (4.91) CP, (4.109) ZP |
+| **T3** | Block structure of `K̃_{m,l}` / `K_{m,l}` against Table 4.2, both for `m ≥ l` and the `m < l` corner case | Table 4.2 |
+| **T4** | `H·x` matches the Table 4.3 closed-form phase relation (on-grid, `Lg=0` only) | Table 4.3 / (4.118)–(4.122) |
+| **T5** | Closed-form nnz counts for `G` and `H` match hand-derived formulas (on-grid, `Lg=0` only) | — |
+| **T6** | Grid test: is `κ·γ_g` an integer? Predicts whether `K_{m,l}` collapses to the `1−1/N` sparse pattern or stays full | Eq. (4.107) |
+
+**Notable finding:** rev. 2 of `otfs_variants_spy.m` corrects an earlier assumption
+that `γ_g = 1` always holds. CP/ZP sample `g^s` at `q = m + n(M+Lg)` per
+(4.93)/(4.109), while RCP/RZP sample at `q = m + nM` per (4.38)/(4.83) — so for
+CP/ZP with `Lg > 0`, the matrix row index and the physical sampling instant
+diverge. The correct grid condition from (4.107) is `κ·γ_g ∈ ℤ`, not `κ ∈ ℤ`:
+e.g. with `Lg=2, M=8`, `γ_g=1.25`, so an integer-Doppler physical channel is
+still off-grid for CP/ZP. A `USE_GAMMA` switch reproduces the earlier
+(incorrect) `γ_g=1` behavior for comparison.
 
 ---
 
