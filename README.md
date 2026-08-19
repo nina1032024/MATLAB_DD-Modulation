@@ -65,9 +65,11 @@ chap4_matlab/
 │   ├── sim9_delay_doppler_domain.m
 │   └── run_stage2.m
 ├── two_path_verification/   # Closed-form (Table 4.3) vs. off-grid convolution ground truth
-│   ├── otfs_build_G.m        # Ground-truth G: CP/ZP/RCP/RZP, fractional delay/Doppler taps
-│   ├── otfs_dd_closed_form.m # Y from the closed form: 'integer' (Table 4.3) or 'fractional'
-│   └── otfs_verify.m         # Driver: 4 tests, incl. TF-domain and Fig. 4.16 reproduction
+│   ├── dirichlet_N.m          # Closed-form periodic Dirichlet kernel D_N(x)
+│   ├── delay_kernel.m         # Pluggable delay kernel p(x): none/zoh/tri/sinc
+│   ├── otfs_build_G.m         # Ground-truth G: CP/ZP/RCP/RZP, fractional delay/Doppler taps, selectable kernel
+│   ├── otfs_dd_closed_form.m  # Y from the closed form: 'integer' (Table 4.3) or 'fractional'
+│   └── otfs_verify.m          # Driver: Test 1, 2a-i/ii/iii, 2d, 3, 4; logs console output to output.txt
 └── OTFS_variants/      # CP/ZP/RCP/RZP structural comparison (Table 4.2/4.3/4.4, §4.5)
     ├── otfs_verify.m          # T1-T6 self-verification of G / H̃ / H per variant
     └── otfs_variants_spy.m    # spy-style structure plots of G, H̃, H for all 4 variants
@@ -204,22 +206,53 @@ Path B (model):         X --closed-form H_DD (Table 4.3) or matrix identity (4.6
 
 | File | Role |
 |---|---|
-| `otfs_build_G.m` | Builds the time-domain channel matrix `G` (ground truth) for CP/ZP/RCP/RZP, supporting fractional delay (`sinc` interpolation, Eq. (4.6)) and fractional Doppler taps |
-| `otfs_dd_closed_form.m` | Computes `Y` directly from the closed-form relation: `'integer'` mode (Table 4.3 / (4.118)–(4.122)) or `'fractional'` mode (periodic-sinc expansion, (4.78)/(4.105), CP/ZP only) |
-| `otfs_verify.m` | Driver script running the four tests below |
+| `dirichlet_N.m` | Closed-form periodic Dirichlet kernel `D_N(x) = Σ_{p=0}^{N-1} e^{j2πxp/N}`, with the on-grid limit handled as `N·1{x ≡ 0 (mod N)}` (not a bare `x==0` test — negative multiples of `N` matter too) |
+| `delay_kernel.m` | Pluggable delay-domain pulse kernel `p(x)`: `'none'` (integer delay only, no interpolation), `'zoh'` (rect Tx + ideal sampler), `'tri'` (rect Tx + matched rect Rx, 2 taps), `'sinc'` (ideal band-limited Tx/Rx pair, the original hard-coded default) |
+| `otfs_build_G.m` | Builds the time-domain channel matrix `G` (ground truth) for CP/ZP/RCP/RZP, off-grid delay/Doppler, kernel selectable via `p.kernel` (default `'tri'`) |
+| `otfs_dd_closed_form.m` | Computes `Y` directly from the closed-form relation: `'integer'` mode (Table 4.3 / (4.118)–(4.122)) or `'fractional'` mode (periodic-Dirichlet expansion, (4.78)/(4.105), CP/ZP only), same `p.kernel` selection |
+| `otfs_verify.m` | Driver script running the tests below; also mirrors everything printed to the console into `output.txt` (own `fopen`/`fclose` + `try/catch`, not `diary()` — see note below) |
 
 | Test | Checks | Theory |
 |---|---|---|
 | **Test 1** | Integer delay/Doppler taps, all four variants: convolution path vs. matrix identity (4.60) vs. symbol-wise Table 4.3 | Table 4.3, Eq. (4.60) |
-| **Test 2** | Fractional-Doppler sweep (CP-OTFS): NMSE of the integer-tap approximation vs. the fractional closed form, as a function of fractional offset | Eq. (4.105) |
+| **Test 2a-i** | Doppler-only sweep, `ℓ` locked to integers (`KERNEL='none'`, so no delay interpolation is exercised at all): NMSE of the integer-tap approximation vs. the fractional closed form vs. a closed-form leakage prediction `2 − 2·Re{D_N(ε)}/N`, plus a single-path diagnostic curve | Eq. (4.105) |
+| **Test 2a-ii** | Delay-only sweep, Doppler locked to integers: 3×3 NMSE matrix crossing 3 ground-truth pulses (`sinc`/`tri`/`zoh`) against 3 model kernels — only the matched (diagonal) kernel should be exact | Eq. (4.6) generalized |
+| **Test 2a-ii(b)** | Guard-length sweep (`L_g` = 6…30) for the `sinc` kernel: the error floor (~ −12 dB) does **not** improve with more guard length | — |
+| **Test 2a-iii** | Phase convention: `z^{κ(m−ℓ_i)}` (true delay) vs. the book's `z^{κ(m−l)}` (tap index), kernel fixed to `'tri'` | Eq. (4.105)/(4.118) |
+| **Test 2d** | LS channel estimation from `T=8` pilot frames, Monte Carlo (200 trials): integer model (`P` unknowns/delay-bin) vs. fractional model (`P·N` unknowns/delay-bin), MSE vs. pilot SNR, −10…40 dB. This is the one test where the "cruder" integer model legitimately wins (at low SNR / small offset) — a bias-variance trade-off, not a ground-truth mismatch | — |
 | **Test 3** | Time-frequency domain: exact identity `y̌ = Ȟx̌` (always holds) vs. the ideal-pulse single-tap approximation (biorthogonality loss) | Eq. (4.13)–(4.14), (4.42) |
 | **Test 4** | Doppler-spread vector `ν_{m,l}[k]` at integer vs. fractional offset, reproducing Fig. 4.16 | Eq. (4.79)–(4.80) |
 
-**Notable finding:** `otfs_dd_closed_form.m` corrects a phase convention in the
-book's (4.118). The correct symbol-level phase uses the *unscaled* Doppler tap
-`κ_i`; only the Doppler shift index `k_i` needs the `γ_g` guard-length scaling
-from (4.97). Applying the book's phase literally as written makes the CP/ZP
-closed form disagree with the convolution ground truth.
+**Notable findings:**
+
+- **Ground-truth phase bug (the significant one).** `otfs_build_G.m` computed the
+  Doppler-tilt phase as `z^{κ_i(q−l)}`, using the discretized tap index `l` instead
+  of the true (possibly fractional) delay `ℓ_i`. Physically the phase comes
+  straight from `e^{j2πν_i(qT_s − τ_i)}` — it does not depend on which tap `l` the
+  delay kernel happens to be evaluated at. For integer delay (`l ≡ ℓ_i`) this is
+  invisible, which is why it went undetected through Test 1 and the original
+  Test 2 (both integer-delay-only). For fractional delay it is a ~30 dB error —
+  and because it lived in the *ground truth* `G`, not just a model, it silently
+  made fractional-delay model comparisons meaningless until fixed (now
+  `z^{κ_i(q−ℓ_i)}`, matching the already-corrected phase in
+  `otfs_dd_closed_form.m`'s `'fractional'` mode).
+- **Kernel tap-range off-by-one.** An earlier hand-derived tap-range table used
+  `l = floor(ℓ_i)` for the `'zoh'` kernel; since `zoh`'s support is `x ∈ [0,1)`,
+  the correct tap is `l = ceil(ℓ_i)`, and the floor version silently zeroed the
+  channel out (`G ≡ 0`, surfacing as `NaN`/`Inf` NMSE). Fixed by no longer
+  hand-deriving floor/ceil offsets per kernel: `kernel_taps()` now deliberately
+  scans a couple of taps wider than the exact support and lets the kernel
+  evaluation zero out anything outside it.
+- **Declared pulse shape vs. implemented kernel.** The system model declares
+  rectangular pulse shaping, but the delay-domain interpolation kernel was
+  hard-coded to `sinc`. `p.kernel` now parameterizes this explicitly (default
+  changed to `'tri'`, matching rect Tx + matched rect Rx).
+- **`sinc` kernel error floor under CP/ZP.** `sinc` is non-causal (infinite,
+  two-sided support), which the block-circular CP/ZP structure cannot represent
+  exactly; this leaves a ~ −12 dB error floor that does **not** improve with
+  more guard length `L_g` (Test 2a-ii(b)) — a structural limitation of the
+  `sinc` kernel under a block-circular frame, not a bug.
+
 
 ---
 

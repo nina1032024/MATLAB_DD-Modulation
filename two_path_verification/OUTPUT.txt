@@ -1,0 +1,62 @@
+M=16 N=8  Ts=4.17 us  T=66.7 us  Tf=0.53 ms
+delay resolution 4.17 us,  Doppler resolution 1875.0 Hz
+
+--- Test 1: integer delay/Doppler taps ---
+  CP : matrix 7.47e-32   symbol-wise 1.32e-29 (-288.8 dB)
+  ZP : matrix 6.76e-32   symbol-wise 1.18e-29 (-289.3 dB)
+ RCP : matrix 7.18e-32   symbol-wise 1.22e-29 (-289.1 dB)
+ RZP : matrix 7.97e-32   symbol-wise 1.70e-02 (-17.7 dB)
+  (RZP's symbol-wise result is the (4.122) large-N approximation, so it will never be exactly 0)
+
+--- Test 2a-i: Doppler-only fractional sweep (ell integer, KERNEL=none) ---
+  frac=0.000 : integer -288.78 dB   fractional 1.32e-29   closed-form    -Inf dB
+  frac=0.005 : integer  -35.13 dB   fractional 1.32e-29   closed-form  -35.69 dB
+  frac=0.050 : integer  -15.15 dB   fractional 1.29e-29   closed-form  -15.71 dB
+  frac=0.100 : integer   -9.19 dB   fractional 1.43e-29   closed-form   -9.74 dB
+  frac=0.150 : integer   -5.77 dB   fractional 1.37e-29   closed-form   -6.31 dB
+  frac=0.200 : integer   -3.41 dB   fractional 1.44e-29   closed-form   -3.95 dB
+  frac=0.250 : integer   -1.65 dB   fractional 1.41e-29   closed-form   -2.18 dB
+  frac=0.300 : integer   -0.29 dB   fractional 1.50e-29   closed-form   -0.80 dB
+  frac=0.350 : integer    0.78 dB   fractional 1.48e-29   closed-form    0.30 dB
+  frac=0.400 : integer    1.63 dB   fractional 1.39e-29   closed-form    1.17 dB
+  frac=0.450 : integer    2.30 dB   fractional 1.54e-29   closed-form    1.87 dB
+  frac=0.500 : integer    3.22 dB   fractional 1.90e-29   closed-form    2.43 dB
+  -- single-path check (g=1, ell=2, kappa_gam=-2+eps) --
+    frac=0.000 : integer -287.47 dB   closed-form    -Inf dB   diff   Inf dB
+    frac=0.005 : integer  -35.25 dB   closed-form  -35.69 dB   diff  0.44 dB
+    frac=0.050 : integer  -15.26 dB   closed-form  -15.71 dB   diff  0.44 dB
+    frac=0.100 : integer   -9.30 dB   closed-form   -9.74 dB   diff  0.44 dB
+    frac=0.150 : integer   -5.88 dB   closed-form   -6.31 dB   diff  0.44 dB
+    frac=0.200 : integer   -3.51 dB   closed-form   -3.95 dB   diff  0.43 dB
+    frac=0.250 : integer   -1.75 dB   closed-form   -2.18 dB   diff  0.43 dB
+    frac=0.300 : integer   -0.38 dB   closed-form   -0.80 dB   diff  0.42 dB
+    frac=0.350 : integer    0.71 dB   closed-form    0.30 dB   diff  0.42 dB
+    frac=0.400 : integer    1.58 dB   closed-form    1.17 dB   diff  0.41 dB
+    frac=0.450 : integer    2.27 dB   closed-form    1.87 dB   diff  0.40 dB
+    frac=0.500 : integer    2.81 dB   closed-form    2.43 dB   diff  0.38 dB
+
+--- Test 2a-ii: Delay-only sweep, ground-truth pulse vs model kernel (3x3) ---
+  truth=sinc  : model sinc   -12.1 dB   tri    -8.0 dB   zoh    -0.2 dB
+  truth=tri   : model sinc    -6.5 dB   tri  -289.0 dB   zoh     1.1 dB
+  truth=zoh   : model sinc    -0.7 dB   tri    -1.6 dB   zoh  -289.0 dB
+
+--- Guard-length sweep: sinc kernel error floor (F4, non-causality) ---
+  Lg= 6 :  -12.1 dB
+  Lg=10 :  -12.1 dB
+  Lg=14 :  -12.1 dB
+  Lg=20 :  -12.1 dB
+  Lg=30 :  -12.2 dB
+
+--- Test 2a-iii: phase convention z^(kappa*(m-ell_i)) vs z^(kappa*(m-l)) ---
+  correct phase z^(kappa*(m-ell_i)) : -288.4 dB
+  book   phase z^(kappa*(m-l))      :  -30.8 dB
+
+--- Test 2d: bias-variance crossover, LS channel estimation ---
+  eps=0.005 : bias floor -40.92 dB, crossover SNR ~ 37.9 dB
+  eps=0.050 : bias floor -20.93 dB, crossover SNR ~ 18.0 dB
+  eps=0.300 : bias floor  -5.85 dB, crossover SNR ~ 2.9 dB
+
+--- Test 3: TF domain ---
+  exact Hcheck identity NMSE = 6.46e-30
+  ideal single-tap product  NMSE = -6.57 dB  <-- biorthogonality loss
+  Hcheck_{0,0} off-diagonal energy fraction = 7.3 %
